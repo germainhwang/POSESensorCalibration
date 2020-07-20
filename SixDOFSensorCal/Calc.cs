@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -10,7 +11,7 @@ namespace SixDOFSensorCal
     {
         /// <summary>
         /// Takes array of X and Y positions
-        /// Returns center position X and Y, and R, raduis of the fitted circle
+        /// Returns center position X and Y, and R, raduis of the fitted circle in 2D space
         /// </summary>
         /// <param name="_pointX"></param>
         /// <param name="_pointY"></param>
@@ -96,6 +97,13 @@ namespace SixDOFSensorCal
             return _center;
         }
 
+        /// <summary>
+        /// Returns normal vector at XY coordinates on the circumference of a circle
+        /// </summary>
+        /// <param name="_pointX"></param>
+        /// <param name="_pointY"></param>
+        /// <param name="_center"></param>
+        /// <returns></returns>
         public static double[,] Normalize(double[] _pointX, double[] _pointY, double[] _center)
         {
             int length = _pointX.Length;
@@ -104,25 +112,30 @@ namespace SixDOFSensorCal
             {
                 double X = _pointX[i] - _center[0];
                 double Y = _pointY[i] - _center[1];
-                double sqrtSum = Math.Sqrt(X * X + Y * Y);
-                _normalized[i, 0] = X / sqrtSum; //also could replace it with the radius (_center[2])
-                _normalized[i, 1] = Y / sqrtSum;
+                double magnitude = Math.Sqrt(X * X + Y * Y);
+                _normalized[i, 0] = X / magnitude; //also could replace it with the radius (_center[2])
+                _normalized[i, 1] = Y / magnitude;
             }
             return _normalized;
         }
 
-        public static double[] GetAnglesFromPosition(double[] _pointX, double[] _pointY)
+        /// <summary>
+        /// Returns Arctan from X Y pair but 
+        /// </summary>
+        /// <param name="_pointX"></param>
+        /// <param name="_pointY"></param>
+        /// <returns></returns>
+        public static double[] GetNormalAnglesAtPositions(double[] _pointX, double[] _pointY)
         {
             int length = _pointX.Length;
-            double[] _angles = new double[length];
-            for (int i = 0; i< length; i++)
-            {
-                _angles[i] = Math.Atan2(_pointY[i], _pointX[i]) * 180 / Math.PI;
-            }
-            return _angles;
+            double[] angles = new double[length];
+            double[] center = FindCenter(_pointX, _pointY);
+            double[,] normalized = Normalize(_pointX, _pointY, center);
+            angles = GetNormalAnglesAtPositions(normalized);
+            return angles;
         }
 
-        public static double[] GetAnglesFromPosition(double[,] _points)
+        public static double[] GetNormalAnglesAtPositions(double[,] _points)
         {
             int length = _points.Length/2;
             double[] _angles = new double[length];
@@ -168,15 +181,16 @@ namespace SixDOFSensorCal
             return _angle;
         }
 
-        public static double[] GetAnglesFromPosition(List<double> _pointX, List<double> _pointY)
+        public static double[] GetNormalAnglesAtPositions(List<double> _pointX, List<double> _pointY)
         {
-            double[] _angles = new double[_pointX.Count()];
-            double[] _posX = _pointX.ToArray();
-            double[] _posY = _pointY.ToArray();
-            double[] _center = FindCenter(_posX, _posY);
-            double[,] _normalized = Normalize(_posX, _posY, _center);
-            _angles = GetAnglesFromPosition(_normalized);
-            return _angles;
+            double[] angles = new double[_pointX.Count()];
+            double[] posX = _pointX.ToArray();
+            double[] posY = _pointY.ToArray();
+            //double[] center = FindCenter(posX, posY);
+            //double[,] normalized = Normalize(posX, posY, center);
+            //angles = GetNormalAnglesAtPositions(normalized);
+            angles = GetNormalAnglesAtPositions(posX, posY);
+            return angles;
         }
 
         public static double[] Stats(List<double> _anglesByPosition, List<double> _anglesByRotation)
@@ -261,11 +275,19 @@ namespace SixDOFSensorCal
             return min;
         }
 
+        /// <summary>
+        /// From points in 3D space, calculates a normal vector of the plane that fits them the best
+        /// Returns a normal vector (x,y,z)
+        /// </summary>
+        /// <param name="_pointsX"></param>
+        /// <param name="_pointsY"></param>
+        /// <param name="_pointsZ"></param>
+        /// <returns></returns>
         public static double[] GetPlaneFromPoints(List<double> _pointsX, List<double> _pointsY, List<double> _pointsZ)
         {
             //Get XYZ of points, find plane fitting the points
             //return plane eq
-            double[] planeEQ = new double[4];
+            double[] planeEQ = new double[3];
 
             int _length = _pointsX.Count;
             if (_length != _pointsY.Count)
@@ -339,24 +361,76 @@ namespace SixDOFSensorCal
 
             //normalize
             double absSq = weightedDir[0] * weightedDir[0] + weightedDir[1] * weightedDir[1] + weightedDir[2] * weightedDir[2];
-            planeEQ[0] = absSq;
-            planeEQ[1] = weightedDir[0] / absSq;
-            planeEQ[2] = weightedDir[1] / absSq;
-            planeEQ[3] = weightedDir[2] / absSq;
+            planeEQ[0] = weightedDir[0] / Math.Sqrt(absSq);
+            planeEQ[1] = weightedDir[1] / Math.Sqrt(absSq);
+            planeEQ[2] = weightedDir[2] / Math.Sqrt(absSq);
 
             return planeEQ;
         }
         
-        public static List<double[]> RotatePointsOnXYPlane(List<double> _pointsX, List<double> _pointY, List<double> _pointZ, double[] _planeEQ)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="_pointsX"></param>
+        /// <param name="_pointY"></param>
+        /// <param name="_pointZ"></param>
+        /// <param name="_planeEQ"></param>
+        /// <returns></returns>
+        public static List<double[]> RotatePointsOnXYPlane(List<double> _pointX, List<double> _pointY, List<double> _pointZ, double[] _planeEQ)
         {
             //Get XYZ of points, rotate them by plane eq
             //return XY of points
+            //using Rodrigues Rotation
             List<double[]> XYCoords = new List<double[]>();
+            
+            if (_pointX.Count != _pointY.Count)
+                return XYCoords;
+            if (_pointX.Count != _pointZ.Count)
+                return XYCoords;
+            if (_planeEQ.Length != 3)
+                return XYCoords;
 
+            double[] xyPlaneNormal = new double[3]{0, 0, 1 };
+            double[] k = CrossProduct(_planeEQ, xyPlaneNormal);
+            double cosTheta = DotProduct(_planeEQ, xyPlaneNormal);
+            double theta = Math.Acos(cosTheta); //since dot product is of unit vectors
+            double sinTheta = Math.Sin(theta);
 
+            for(int i = 0; i< _pointX.Count; i++)
+            {
+                double[] pt = new double[3] {_pointX[i], _pointY[i], _pointZ[i] }; //Input Point
+                double[] rotatedPoint = new double[3];
+                double[] crossProd = CrossProduct(k, pt);
+                double dotProd = DotProduct(k, pt);
+                for (int j = 0; j< 3; j++)
+                    rotatedPoint[j] = pt[j] * cosTheta + crossProd[j] * sinTheta + k[j] * dotProd * (1 - cosTheta);
+
+                XYCoords.Add(rotatedPoint);
+            }
 
             return XYCoords;
         }
+
+        public static double[] CrossProduct (double[] vector1, double[] vector2)
+        {
+            double[] crossProduct = new double[3];
+            double[] v1 = vector1;
+            double[] v2 = vector2;
+            crossProduct[0] = v1[1] * v2[2] - v1[2] * v2[1];
+            crossProduct[1] = v1[2] * v2[0] - v1[0] * v2[2];
+            crossProduct[2] = v1[0] * v2[1] - v1[1] * v2[0];
+            return crossProduct;
+        }
+        public static double DotProduct(double[] vector1, double[] vector2)
+        {
+            double dotProduct = 0;
+            if (vector1.Length != vector2.Length)
+                return dotProduct;
+            for (int i = 0; i < vector1.Length; i++)
+                dotProduct += vector1[i] * vector2[i];
+            return dotProduct;
+        }
+
 
         public static double[] FindCenter(List<double[]> _XYCoords)
         {

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using System.Net.Http.Headers;
 
 namespace SixDOFSensorCal
 {
@@ -14,6 +15,12 @@ namespace SixDOFSensorCal
         public static double AngleMax = -999.0;
         public static double AngleMin = -999.0;
         public static double[] Center = new double[3];
+        /// <summary>
+        /// Reads NDI generated CSV file containing orientation and position data
+        /// Parses and makes lists of either Quaternion or Euler angles and XYZ positions
+        /// Then performs circle fitting to the data and angle offset between the roll angle as the sensor is mounted and the normal angle at positions
+        /// </summary>
+        /// <param name="filename"></param>
         public static void ParseNDIFile(string filename)
         {
             //Reading CSV
@@ -31,12 +38,14 @@ namespace SixDOFSensorCal
                 {
                     if (header[i] == "Q0")
                     {
+                        // If csv contains quarternion angles, make end index larger than start index
                         _startIndexAngle = i;
                         _endIndexAngle = i+3;
                     }
                         
                     if (header[i] == "Rz")
                     {
+                        // If Euler angles, make start and end index same number.
                         _startIndexAngle = i;
                         _endIndexAngle = i;
                     }
@@ -48,15 +57,17 @@ namespace SixDOFSensorCal
                     }
                 }
 
-                List<double> _anglesByRotation = new List<double>(); //What NDI reads
-                List<double> _anglesByPosition = new List<double>(); //What I get from positions
+                List<double> _sensorRollAngle = new List<double>(); //What NDI reads
+                List<double> _normalAngle = new List<double>(); //What I get from positions
                 List<double> _positionX = new List<double>();
                 List<double> _positionY = new List<double>();
+                List<double> _positionZ = new List<double>();
                 foreach (var line in lines)
                 {
                     double _angle = 0;
                     double _posX = 0;
                     double _posY = 0;
+                    double _posZ = 0;
                     if (_startIndexAngle < _endIndexAngle) //if quaternion
                     {
                         double _w = 0, _x = 0, _y = 0, _z = 0;
@@ -73,6 +84,7 @@ namespace SixDOFSensorCal
                         }
                         finally
                         {
+                            //I could check if sqaure sum of quaternion angles is 1
                             double _angleSum = Math.Abs(_w + _x + _y + _z);
                             if ((_angle+_angleSum) < 999999.0)
                                 _angle = Calc.GetAngleFromQuat(_w, _x, _y, _z);
@@ -92,42 +104,65 @@ namespace SixDOFSensorCal
                     try
                     {
                         _posX = Convert.ToDouble(line[_startIndexPosition]);
-                        _posY = Convert.ToDouble(line[_startIndexPosition+1]);
+                        _posY = Convert.ToDouble(line[_startIndexPosition + 1]);
+                        _posZ = Convert.ToDouble(line[_startIndexPosition + 2]);
                     }
                     catch
                     {
                         _posX = 999999.0;
                         _posY = 999999.0;
+                        _posZ = 999999.0;
                     }
 
-                    if (Math.Abs(_angle + _posX +_posY)< 999999.0)
+                    if (Math.Abs(_angle + _posX +_posY)< 999999.0) //check for any invalid value - NDI returns non numeric value                    {
                     {
-                        _anglesByRotation.Add(_angle);
+                        _sensorRollAngle.Add(_angle);
                         _positionX.Add(_posX);
                         _positionY.Add(_posY);
+                        _positionZ.Add(_posZ);
                     }
                 }
 
+                double[] plane = Calc.GetPlaneFromPoints(_positionX, _positionY, _positionZ);
+                List<double[]> rotatedPoints = Calc.RotatePointsOnXYPlane(_positionX, _positionY, _positionZ, plane);
+                double[] xPos = new double[rotatedPoints.Count];
+                double[] yPos = new double[rotatedPoints.Count];
+                double[] sensorAngles = new double[rotatedPoints.Count];
+                double cosTheta = Calc.DotProduct(plane, new double[3] { 0, 0, 1 });
+                double theta = Math.Acos(cosTheta)*180/3.141592;
+                for (int i = 0; i< rotatedPoints.Count; i++)
+                {
+                    xPos[i] = rotatedPoints[i][0];
+                    yPos[i] = rotatedPoints[i][1];
+                }
+
+                double[] CenteronXY = Calc.FindCenter(xPos, yPos);
 
                 //Calculation
                 Center = Calc.FindCenter(_positionX.ToArray(), _positionY.ToArray());
                  
-                double[] _angles = Calc.GetAnglesFromPosition(_positionX, _positionY);
-                _anglesByPosition = _angles.ToList();
+                double[] _angles = Calc.GetNormalAnglesAtPositions(_positionX, _positionY);
+                double[] _anglesOnXY = Calc.GetNormalAnglesAtPositions(xPos, yPos);
+                for (int i = 0; i < rotatedPoints.Count; i++)
+                {
+                    _anglesOnXY[i] -= theta;
+                }
+
+                    _normalAngle = _angles.ToList();
 
                 using (FileStream fs = new FileStream("d:\\test.csv", FileMode.Create))
                 {
                     using (StreamWriter sw = new StreamWriter(fs))
                     {
-                        sw.WriteLine("{0},{1},{2}", "Measured Angle", "Normal Angle", "Difference Measured-Normal angle");
-                        for (int i = 0; i < _anglesByPosition.Count(); ++i)
+                        sw.WriteLine("{0},{1},{2}", "Normal Angle", "Sensor Roll Angle", "Difference Measured-Normal angle, Rotated on XY plane");
+                        for (int i = 0; i < _normalAngle.Count(); ++i)
                         {
-                            sw.WriteLine("{0},{1},{2}", _anglesByPosition[i], _anglesByRotation[i], _anglesByPosition[i] - _anglesByRotation[i]);
+                            sw.WriteLine("{0},{1},{2},{3}", _normalAngle[i], _sensorRollAngle[i], _normalAngle[i] - _sensorRollAngle[i], _anglesOnXY[i]);
                         }
                     }
                 }
 
-                double[] stats = Calc.Stats(_anglesByPosition, _anglesByRotation);
+                double[] stats = Calc.Stats(_normalAngle, _sensorRollAngle);
                 AngleCorrection = stats[0];
                 AngleDeviation = stats[1];
                 AngleMin = stats[2];
