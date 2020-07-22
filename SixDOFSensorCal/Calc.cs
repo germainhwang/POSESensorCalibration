@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Security.Policy;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -9,6 +12,25 @@ namespace SixDOFSensorCal
 {
     public class Calc
     {
+        public static double[] Process(List<double[]>data)
+        {
+            int lineCount = data.Count; 
+            double[] results = new double[7];
+            double[] x = new double[lineCount];
+            double[] y = new double[lineCount];
+            double[] z = new double[lineCount];
+
+            for(int i = 0; i < lineCount; i++)
+            {
+                x[i] = data[i][0];
+                y[i] = data[i][1];
+                z[i] = data[i][2];
+            }
+
+            double[] planeEq = GetPlaneFromPoints(x, y, z);
+            
+            return results;
+        }
         /// <summary>
         /// Takes array of X and Y positions
         /// Returns center position X and Y, and R, raduis of the fitted circle in 2D space
@@ -96,9 +118,205 @@ namespace SixDOFSensorCal
 
             return _center;
         }
+        public static double[] FindCenter(List<double[]> _XYCoords)
+        {
+            int listLength = _XYCoords.Count;
+            double[] pointX = new double[listLength];
+            double[] pointY = new double[listLength];
+            for (int i = 0; i< listLength; i++)
+            {
+                pointX[i] = _XYCoords[i][0];
+                pointY[i] = _XYCoords[i][1];
+            }
+            double[] center = FindCenter(pointX, pointY);
+            return center;
+        }
 
         /// <summary>
-        /// Returns normal vector at XY coordinates on the circumference of a circle
+        /// From points in 3D space, calculates a normal vector of the plane that fits them the best
+        /// Returns a normal vector (x,y,z)
+        /// </summary>
+        /// <param name="_pointsX"></param>
+        /// <param name="_pointsY"></param>
+        /// <param name="_pointsZ"></param>
+        /// <returns></returns>
+        public static double[] GetPlaneFromPoints(List<double> _pointsX, List<double> _pointsY, List<double> _pointsZ)
+        {
+            //Get XYZ of points, find plane fitting the points
+            //return plane eq
+            double[] planeEQ = new double[3];
+            double[] pointsX = _pointsX.ToArray();
+            double[] pointsY = _pointsY.ToArray();
+            double[] pointsZ = _pointsZ.ToArray();
+
+            planeEQ = GetPlaneFromPoints(pointsX, pointsY, pointsZ);
+            #region dup
+            //int _length = _pointsX.Count;
+            //if (_length != _pointsY.Count)
+            //    return planeEQ;
+            //if (_length != _pointsZ.Count)
+            //    return planeEQ;
+
+            //double _centroidX = GetMean(_pointsX.ToArray());
+            //double _centroidY = GetMean(_pointsY.ToArray());
+            //double _centroidZ = GetMean(_pointsZ.ToArray());
+
+
+            //double Mxx = 0, Myy = 0, Mxy = 0, Mxz = 0, Myz = 0, Mzz = 0, Mz = 0;
+            //for (int i = 0; i < _length; i++)
+            //{
+            //    double Xi = _pointsX[i] - _centroidX;
+            //    double Yi = _pointsY[i] - _centroidY;
+            //    double Zi = _pointsZ[i] - _centroidZ;
+
+            //    Mxy += (Xi * Yi);
+            //    Mxx += (Xi * Xi);
+            //    Myy += (Yi * Yi);
+            //    Mxz += (Xi * Zi);
+            //    Myz += (Yi * Zi);
+            //    Mzz += (Zi * Zi);
+            //}
+
+            //Mxx = Mxx / _length;
+            //Myy = Myy / _length;
+            //Mxy = Mxy / _length;
+            //Mxz = Mxz / _length;
+            //Myz = Myz / _length;
+            //Mzz = Mzz / _length;
+
+
+            //double[] weightedDir = new double[3];
+            //double[] axisDir = new double[3];
+            ////in X axis
+            //axisDir[0] = Myy * Mzz - Myz * Myz;
+            //axisDir[1] = Mxz * Myz - Mxy * Mzz;
+            //axisDir[2] = Mxy * Myz - Mxz * Myy;
+
+            //double weightX = axisDir[0] * axisDir[0];
+
+            //for (int i = 0; i < 3; i++)
+            //    weightedDir[i] += axisDir[i] * weightX;
+
+            ////in Y axis
+            //axisDir[0] = Mxz * Myz - Mxy * Mzz;
+            //axisDir[1] = Mxx * Mzz - Mxz * Mxz;
+            //axisDir[2] = Mxy * Mxz - Myz * Mxx;
+
+            //double weightY = axisDir[1] * axisDir[1];
+            //double dotProd = axisDir[0] * weightedDir[0] + axisDir[1] * weightedDir[1] + axisDir[2] * weightedDir[2];
+            //if (dotProd < 0)
+            //    weightY *= -1;
+            //for (int i = 0; i < 3; i++)
+            //    weightedDir[i] += axisDir[i] * weightY;
+
+            ////in Z axis
+            //axisDir[0] = Mxy * Myz - Mxz * Myy;
+            //axisDir[1] = Mxy * Mxz - Myz * Mxx;
+            //axisDir[2] = Mxx * Myy - Mxy * Mxy;
+
+            //double weightZ = axisDir[2] * axisDir[2];
+            //dotProd = axisDir[0] * weightedDir[0] + axisDir[1] * weightedDir[1] + axisDir[2] * weightedDir[2];
+            //if (dotProd < 0)
+            //    weightZ *= -1;
+            //for (int i = 0; i < 3; i++)
+            //    weightedDir[i] += axisDir[i] * weightZ;
+
+            ////normalize
+            //double absSq = weightedDir[0] * weightedDir[0] + weightedDir[1] * weightedDir[1] + weightedDir[2] * weightedDir[2];
+            //planeEQ[0] = weightedDir[0] / Math.Sqrt(absSq);
+            //planeEQ[1] = weightedDir[1] / Math.Sqrt(absSq);
+            //planeEQ[2] = weightedDir[2] / Math.Sqrt(absSq);
+            #endregion
+            return planeEQ;
+        }
+        public static double[] GetPlaneFromPoints(double[] _pointsX, double[] _pointsY, double[] _pointsZ)
+        {
+            //Get XYZ of points, find plane fitting the points
+            //return plane eq
+            double[] planeEQ = new double[3];
+
+            int _length = _pointsX.Length;
+            if (_length != _pointsY.Length)
+                return planeEQ;
+            if (_length != _pointsZ.Length)
+                return planeEQ;
+
+            double _centroidX = GetMean(_pointsX);
+            double _centroidY = GetMean(_pointsY);
+            double _centroidZ = GetMean(_pointsZ);
+
+
+            double Mxx = 0, Myy = 0, Mxy = 0, Mxz = 0, Myz = 0, Mzz = 0, Mz = 0;
+            for (int i = 0; i < _length; i++)
+            {
+                double Xi = _pointsX[i] - _centroidX;
+                double Yi = _pointsY[i] - _centroidY;
+                double Zi = _pointsZ[i] - _centroidZ;
+
+                Mxy += (Xi * Yi);
+                Mxx += (Xi * Xi);
+                Myy += (Yi * Yi);
+                Mxz += (Xi * Zi);
+                Myz += (Yi * Zi);
+                Mzz += (Zi * Zi);
+            }
+
+            Mxx = Mxx / _length;
+            Myy = Myy / _length;
+            Mxy = Mxy / _length;
+            Mxz = Mxz / _length;
+            Myz = Myz / _length;
+            Mzz = Mzz / _length;
+
+
+            double[] weightedDir = new double[3];
+            double[] axisDir = new double[3];
+            //in X axis
+            axisDir[0] = Myy * Mzz - Myz * Myz;
+            axisDir[1] = Mxz * Myz - Mxy * Mzz;
+            axisDir[2] = Mxy * Myz - Mxz * Myy;
+
+            double weightX = axisDir[0] * axisDir[0];
+
+            for (int i = 0; i < 3; i++)
+                weightedDir[i] += axisDir[i] * weightX;
+
+            //in Y axis
+            axisDir[0] = Mxz * Myz - Mxy * Mzz;
+            axisDir[1] = Mxx * Mzz - Mxz * Mxz;
+            axisDir[2] = Mxy * Mxz - Myz * Mxx;
+
+            double weightY = axisDir[1] * axisDir[1];
+            double dotProd = axisDir[0] * weightedDir[0] + axisDir[1] * weightedDir[1] + axisDir[2] * weightedDir[2];
+            if (dotProd < 0)
+                weightY *= -1;
+            for (int i = 0; i < 3; i++)
+                weightedDir[i] += axisDir[i] * weightY;
+
+            //in Z axis
+            axisDir[0] = Mxy * Myz - Mxz * Myy;
+            axisDir[1] = Mxy * Mxz - Myz * Mxx;
+            axisDir[2] = Mxx * Myy - Mxy * Mxy;
+
+            double weightZ = axisDir[2] * axisDir[2];
+            dotProd = axisDir[0] * weightedDir[0] + axisDir[1] * weightedDir[1] + axisDir[2] * weightedDir[2];
+            if (dotProd < 0)
+                weightZ *= -1;
+            for (int i = 0; i < 3; i++)
+                weightedDir[i] += axisDir[i] * weightZ;
+
+            //normalize
+            double absSq = weightedDir[0] * weightedDir[0] + weightedDir[1] * weightedDir[1] + weightedDir[2] * weightedDir[2];
+            planeEQ[0] = weightedDir[0] / Math.Sqrt(absSq);
+            planeEQ[1] = weightedDir[1] / Math.Sqrt(absSq);
+            planeEQ[2] = weightedDir[2] / Math.Sqrt(absSq);
+
+            return planeEQ;
+        }
+
+        /// <summary>
+        /// Centers circle and makes unit circle
+        /// Returns transformed XY coordinates
         /// </summary>
         /// <param name="_pointX"></param>
         /// <param name="_pointY"></param>
@@ -120,7 +338,7 @@ namespace SixDOFSensorCal
         }
 
         /// <summary>
-        /// Returns Arctan from X Y pair but 
+        /// Returns normal angles on the circumference at XY coordinates
         /// </summary>
         /// <param name="_pointX"></param>
         /// <param name="_pointY"></param>
@@ -161,16 +379,6 @@ namespace SixDOFSensorCal
             return _angles;
         }
 
-        public static double GetMean (double[] _points)
-        {
-            double _mean = -99999.0f;
-            double _sum = 0;
-            for (int i = 0; i < _points.Length; i++)
-                _sum += _points[i];
-            _mean = _sum / _points.Length;
-            return _mean;
-        }
-
         public static double GetAngleFromQuat(double _Qw, double _Qx, double _Qy, double _Qz)
         {
             double _angle = -9999;
@@ -179,6 +387,21 @@ namespace SixDOFSensorCal
             double yterm = 2 * (_Qw * _Qz + _Qx * _Qy);
             _angle = Math.Atan2(yterm, xterm) * 180 / Math.PI;
             return _angle;
+        }
+
+        public static double[] GetMatrixFromQuat(double _Qw, double _Qx, double _Qy, double _Qz)
+        {
+            double[] rotMat = new double[9];
+            rotMat[0] = 1 - 2 * (_Qy * _Qy + _Qz * _Qz);
+            rotMat[1] = 2 * (_Qx * _Qy - _Qz * _Qw);
+            rotMat[2] = 2 * (_Qx * _Qz + _Qy * _Qw);
+            rotMat[3] = 2 * (_Qx * _Qy + _Qz * _Qw);
+            rotMat[4] = 1 - 2 * (_Qx * _Qx + _Qz * _Qz);
+            rotMat[5] = 2 * (_Qy * _Qz - _Qx * _Qw);
+            rotMat[6] = 2 * (_Qx * _Qz - _Qy * _Qw);
+            rotMat[7] = 2 * (_Qy * _Qz + _Qx * _Qw);
+            rotMat[8] = 1 - 2 * (_Qx * _Qx + _Qy * _Qy);
+            return rotMat;
         }
 
         public static double[] GetNormalAnglesAtPositions(List<double> _pointX, List<double> _pointY)
@@ -191,6 +414,16 @@ namespace SixDOFSensorCal
             //angles = GetNormalAnglesAtPositions(normalized);
             angles = GetNormalAnglesAtPositions(posX, posY);
             return angles;
+        }
+
+        public static double GetMean (double[] _points)
+        {
+            double _mean = -99999.0f;
+            double _sum = 0;
+            for (int i = 0; i < _points.Length; i++)
+                _sum += _points[i];
+            _mean = _sum / _points.Length;
+            return _mean;
         }
 
         public static double[] Stats(List<double> _anglesByPosition, List<double> _anglesByRotation)
@@ -275,107 +508,18 @@ namespace SixDOFSensorCal
             return min;
         }
 
-        /// <summary>
-        /// From points in 3D space, calculates a normal vector of the plane that fits them the best
-        /// Returns a normal vector (x,y,z)
-        /// </summary>
-        /// <param name="_pointsX"></param>
-        /// <param name="_pointsY"></param>
-        /// <param name="_pointsZ"></param>
-        /// <returns></returns>
-        public static double[] GetPlaneFromPoints(List<double> _pointsX, List<double> _pointsY, List<double> _pointsZ)
-        {
-            //Get XYZ of points, find plane fitting the points
-            //return plane eq
-            double[] planeEQ = new double[3];
+    }
 
-            int _length = _pointsX.Count;
-            if (_length != _pointsY.Count)
-                return planeEQ;
-            if (_length != _pointsZ.Count)
-                return planeEQ;
-
-            double _centroidX = GetMean(_pointsX.ToArray());
-            double _centroidY = GetMean(_pointsY.ToArray());
-            double _centroidZ = GetMean(_pointsZ.ToArray());
-
-
-            double Mxx = 0, Myy = 0, Mxy = 0, Mxz = 0, Myz = 0, Mzz = 0, Mz = 0;
-            for (int i = 0; i < _length; i++)
-            {
-                double Xi = _pointsX[i] - _centroidX;
-                double Yi = _pointsY[i] - _centroidY;
-                double Zi = _pointsZ[i] - _centroidZ;
-
-                Mxy += (Xi * Yi);
-                Mxx += (Xi * Xi);
-                Myy += (Yi * Yi);
-                Mxz += (Xi * Zi);
-                Myz += (Yi * Zi);
-                Mzz += (Zi * Zi);
-            }
-
-            Mxx = Mxx / _length;
-            Myy = Myy / _length;
-            Mxy = Mxy / _length;
-            Mxz = Mxz / _length;
-            Myz = Myz / _length;
-            Mzz = Mzz / _length;
-
-
-            double[] weightedDir = new double[3];
-            double[] axisDir = new double[3];
-            //in X axis
-            axisDir[0] = Myy * Mzz - Myz * Myz;
-            axisDir[1] = Mxz * Myz - Mxy * Mzz;
-            axisDir[2] = Mxy * Myz - Mxz * Myy;
-
-            double weightX = axisDir[0] * axisDir[0];
-
-            for (int i = 0; i < 3; i++)
-                weightedDir[i] += axisDir[i] * weightX;
-
-            //in Y axis
-            axisDir[0] = Mxz * Myz - Mxy * Mzz;
-            axisDir[1] = Mxx * Mzz - Mxz * Mxz;
-            axisDir[2] = Mxy * Mxz - Myz * Mxx;
-
-            double weightY = axisDir[1] * axisDir[1];
-            double dotProd = axisDir[0] * weightedDir[0] + axisDir[1] * weightedDir[1] + axisDir[2] * weightedDir[2];
-            if (dotProd < 0)
-                weightY *= -1;
-            for (int i = 0; i < 3; i++)
-                weightedDir[i] += axisDir[i] * weightY;
-
-            //in Z axis
-            axisDir[0] = Mxy * Myz - Mxz * Myy;
-            axisDir[1] = Mxy * Mxz - Myz * Mxx;
-            axisDir[2] = Mxx * Myy - Mxy * Mxy;
-
-            double weightZ = axisDir[2] * axisDir[2];
-            dotProd = axisDir[0] * weightedDir[0] + axisDir[1] * weightedDir[1] + axisDir[2] * weightedDir[2];
-            if (dotProd < 0)
-                weightZ *= -1;
-            for (int i = 0; i < 3; i++)
-                weightedDir[i] += axisDir[i] * weightZ;
-
-            //normalize
-            double absSq = weightedDir[0] * weightedDir[0] + weightedDir[1] * weightedDir[1] + weightedDir[2] * weightedDir[2];
-            planeEQ[0] = weightedDir[0] / Math.Sqrt(absSq);
-            planeEQ[1] = weightedDir[1] / Math.Sqrt(absSq);
-            planeEQ[2] = weightedDir[2] / Math.Sqrt(absSq);
-
-            return planeEQ;
-        }
-        
-        /// <summary>
+    public class VectorOps
+    {
+               /// <summary>
         /// 
         /// </summary>
         /// <param name="_pointsX"></param>
         /// <param name="_pointY"></param>
         /// <param name="_pointZ"></param>
         /// <param name="_planeEQ"></param>
-        /// <returns></returns>
+        /// <returns></returns> 
         public static List<double[]> RotatePointsOnXYPlane(List<double> _pointX, List<double> _pointY, List<double> _pointZ, double[] _planeEQ)
         {
             //Get XYZ of points, rotate them by plane eq
@@ -390,7 +534,7 @@ namespace SixDOFSensorCal
             if (_planeEQ.Length != 3)
                 return XYCoords;
 
-            double[] xyPlaneNormal = new double[3]{0, 0, 1 };
+            double[] xyPlaneNormal = new double[3]{ 0, 0, -1 };
             double[] k = CrossProduct(_planeEQ, xyPlaneNormal);
             double cosTheta = DotProduct(_planeEQ, xyPlaneNormal);
             double theta = Math.Acos(cosTheta); //since dot product is of unit vectors
@@ -411,6 +555,65 @@ namespace SixDOFSensorCal
             return XYCoords;
         }
 
+        /// <summary>
+        /// Gets two unit vectors [x,y,z] format and returns rotation matrix between the two
+        /// R = [R11, R12, R13, R21, R22, R23, R31, R32, R33];
+        /// </summary>
+        /// <param name="a">vector {1x3}</param>
+        /// <param name="b">vector {1x3}</param>
+        /// <returns></returns>
+        public static double[] FindRotMatrixFromTwoVectors(double[] a, double[] b)
+        {
+            double[] rotMat = new double[9];
+            double[] vMat = new double[9];
+            double[] vMatSq = new double[9];
+            double[] iMat = new double[9] { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+            if (a.Length != 3 || a.Length != b.Length)
+                return rotMat;
+
+            //normalize
+            double aMag = Math.Sqrt(DotProduct(a, a));
+            if (aMag < 0.999 || aMag> 1.001)
+                for (int i = 0; i < 3; i++)
+                    a[i] = a[i] / aMag;
+            double bMag = Math.Sqrt(DotProduct(b, b));
+            if (bMag < 0.999 || bMag > 1.001)
+                for (int i = 0; i < 3; i++)
+                    b[i] = b[i] / bMag;
+
+
+            double[] v = CrossProduct(a, b);
+            double cosTheta = DotProduct(a, b);
+            double sinTheta = Math.Sin(Math.Acos(cosTheta));
+            double s = Math.Sqrt(DotProduct(v, v));
+            double c = DotProduct(a, b);
+            
+            if (c == -1) //c cannot be -1. see below
+                return rotMat;
+
+            double d = 1 / (1 + c);
+
+            vMat[0] = 0;
+            vMat[1] = v[2] * -1;
+            vMat[2] = v[1];
+            
+            vMat[3] = v[2];
+            vMat[4] = 0;
+            vMat[5] = v[0] * -1;
+
+            vMat[6] = v[1] * -1;
+            vMat[7] = v[0];
+            vMat[8] = 0;
+
+            //check Matrix op
+            vMatSq = MatrixProduct(vMat, vMat);
+
+            for (int i = 0; i < 9; i++)
+                rotMat[i] = iMat[i] + vMat[i] + vMatSq[i] * d;
+
+            return rotMat;
+        }
+
         public static double[] CrossProduct (double[] vector1, double[] vector2)
         {
             double[] crossProduct = new double[3];
@@ -421,6 +624,7 @@ namespace SixDOFSensorCal
             crossProduct[2] = v1[0] * v2[1] - v1[1] * v2[0];
             return crossProduct;
         }
+        
         public static double DotProduct(double[] vector1, double[] vector2)
         {
             double dotProduct = 0;
@@ -431,20 +635,38 @@ namespace SixDOFSensorCal
             return dotProduct;
         }
 
-
-        public static double[] FindCenter(List<double[]> _XYCoords)
+        public static double[] MatrixProduct(double[] a, double[] b)
         {
-            int listLength = _XYCoords.Count;
-            double[] pointX = new double[listLength];
-            double[] pointY = new double[listLength];
-            for (int i = 0; i< listLength; i++)
-            {
-                pointX[i] = _XYCoords[i][0];
-                pointY[i] = _XYCoords[i][1];
-            }
-            double[] center = FindCenter(pointX, pointY);
-            return center;
-        }
+            double[] product = new double[9];
+            double A11 = a[0];
+            double A12 = a[1];
+            double A13 = a[2];
+            double A21 = a[3];
+            double A22 = a[4];
+            double A23 = a[5];
+            double A31 = a[6];
+            double A32 = a[7];
+            double A33 = a[8];
+            double B11 = b[0];
+            double B12 = b[1];
+            double B13 = b[2];
+            double B21 = b[3];
+            double B22 = b[4];
+            double B23 = b[5];
+            double B31 = b[6];
+            double B32 = b[7];
+            double B33 = b[8];
 
+            product[0] = DotProduct(new double[3] { A11, A12, A13 }, new double[3] { B11, B21, B31 });
+            product[1] = DotProduct(new double[3] { A11, A12, A13 }, new double[3] { B12, B22, B32 });
+            product[2] = DotProduct(new double[3] { A11, A12, A13 }, new double[3] { B13, B23, B33 });
+            product[3] = DotProduct(new double[3] { A21, A22, A23 }, new double[3] { B11, B21, B31 });
+            product[4] = DotProduct(new double[3] { A21, A22, A23 }, new double[3] { B12, B22, B32 });
+            product[5] = DotProduct(new double[3] { A21, A22, A23 }, new double[3] { B13, B23, B33 });
+            product[6] = DotProduct(new double[3] { A31, A32, A33 }, new double[3] { B11, B21, B31 });
+            product[7] = DotProduct(new double[3] { A31, A32, A33 }, new double[3] { B12, B22, B32 });
+            product[8] = DotProduct(new double[3] { A31, A32, A33 }, new double[3] { B13, B23, B33 });
+            return product;
+        }
     }
 }

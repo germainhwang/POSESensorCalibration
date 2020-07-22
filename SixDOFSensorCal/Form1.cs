@@ -22,7 +22,15 @@ namespace SixDOFSensorCal
         {
             if (openFileDialog1.ShowDialog() == GetOK())
             {
-                ReadCSV.ParseNDIFile(openFileDialog1.FileName);
+                //Read CSV file and get Pose data in double[]
+                //{X, Y, Z, Qw, Qx, Qy, Qz} or
+                //{X, Y, Z, Rx, Ry, Rz}
+                List<double[]> poseData = new List<double[]>();
+                poseData.AddRange(ReadCSV.ParseNDIFile(openFileDialog1.FileName));
+
+                //Calculate 
+                Calc.Process()
+
 
                 this.textBox1.Text = ReadCSV.AngleCorrection.ToString("F5");
                 this.textBox2.Text = ReadCSV.AngleDeviation.ToString("F5");
