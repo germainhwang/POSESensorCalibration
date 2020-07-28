@@ -3,32 +3,127 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Linq;
+using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Security.Policy;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Schema;
 
 namespace SixDOFSensorCal
 {
     public class Calc
     {
+        /// <summary>
+        /// Perform circle fitting on the points and calculate roll angle offset
+        /// return doulbe array in the format
+        /// {offset angle, stdev, min, max, x center, y center, radius}
+        /// </summary>
+        /// <param name="data">list of double array. {X,Y,Z,Qw,Qx,Qy,Qz} or {X,Y,Z,Rx,Ry,Rz}</param>
+        /// <returns></returns>
         public static double[] Process(List<double[]>data)
         {
-            int lineCount = data.Count; 
-            double[] results = new double[7];
-            double[] x = new double[lineCount];
+
+            //def variables
+            double[] results = new double[7]; 
+            int lineCount = data.Count;             
+            double[] x = new double[lineCount]; //place holder from the input data
             double[] y = new double[lineCount];
             double[] z = new double[lineCount];
+            double[] xyPlaneNormal = new double[3] { 0, 0, -1 };
+            double[] xPos = new double[lineCount]; //rotated position on xy plane
+            double[] yPos = new double[lineCount]; //rotated position on xy plane
+            double[] _Qx = new double[lineCount];
+            double[] _Qy = new double[lineCount];
+            double[] _Qz = new double[lineCount];
+            double[] _Qw = new double[lineCount];
+            double[] _Ry = new double[lineCount];
+            double[] _Rz = new double[lineCount];
+            double[] _Rx = new double[lineCount];
+            double[] sensorRollAngles = new double[lineCount];
 
-            for(int i = 0; i < lineCount; i++)
+            //make double array for xyz coordinates
+            for (int i = 0; i < lineCount; i++)
             {
                 x[i] = data[i][0];
                 y[i] = data[i][1];
                 z[i] = data[i][2];
+                if (data[0].Length == 7)
+                {
+                    _Qw[i] = data[i][3];
+                    _Qx[i] = data[i][4];
+                    _Qy[i] = data[i][5];
+                    _Qz[i] = data[i][6];
+                }
+                else
+                {
+                    _Rx[i] = data[i][3];
+                    _Ry[i] = data[i][4];
+                    _Rz[i] = data[i][5];
+                }
+            }
+            
+
+            //rotate points on xy plane
+            double[] planeNormal = GetPlaneFromPoints(x, y, z);
+            List<double[]> rotatedPoints = VectorOps.RotatePointsOntoXYPlane(x, y, z, planeNormal, xyPlaneNormal);
+            for (int i = 0; i < rotatedPoints.Count; i++)
+            {
+                xPos[i] = rotatedPoints[i][0];
+                yPos[i] = rotatedPoints[i][1];
+            }
+            //find the fitted circle
+            double[] centeronXYPlane = Calc.FindCenter(xPos, yPos);
+
+            //get normal angles at xy positions
+            double[] normalAngles = Calc.GetNormalAnglesAtPositions(xPos, yPos);
+            
+            //find rotation matrix for rotating measured angles
+            double[] rotMatrix = VectorOps.FindRotMatrixFromTwoVectors(planeNormal, xyPlaneNormal);
+
+            //Test 1, Rodriguez rotation on Euler angles
+            List<double[]> eulerAngles = new List<double[]>();
+            for (int i = 0; i< lineCount; i++)
+            {
+                if (data[0].Length == 7)
+                {
+                    double[] eulerFromQuat = GetEulerFromQuat(_Qw[i], _Qx[i], _Qy[i], _Qz[i]);
+                    eulerAngles.Add(eulerFromQuat);
+                    double[] temp = VectorOps.RotatePointOntoXYPlane(eulerFromQuat[0], eulerFromQuat[1], eulerFromQuat[2], planeNormal, xyPlaneNormal);
+                    sensorRollAngles[i] = temp[2];
+                }
+                else
+                {
+                    eulerAngles.Add(new double[3] { _Rx[i], _Ry[i], _Rz[i] });
+                    double[] temp = VectorOps.RotatePointOntoXYPlane(_Rx[i], _Ry[i], _Rz[i], planeNormal, xyPlaneNormal);
+                    sensorRollAngles[i] = temp[2];
+                }
             }
 
-            double[] planeEq = GetPlaneFromPoints(x, y, z);
-            
+            ////Calculation
+
+            using (FileStream fs = new FileStream("d:\\test.csv", FileMode.Create))
+            {
+                using (StreamWriter sw = new StreamWriter(fs))
+                {
+                    sw.WriteLine("{0},{1},{2}", "Normal Angle", "Sensor Roll Angle", "Difference Measured-Normal angle");
+                    for (int i = 0; i < lineCount; ++i)
+                    {
+                        sw.WriteLine("{0},{1},{2}", normalAngles[i], sensorRollAngles[i], normalAngles[i] - normalAngles[i]);
+                    }
+                }
+            }
+
+            double[] stats = Calc.Stats(normalAngles, sensorRollAngles);
+            results[0] = stats[0];
+            results[1] = stats[1];
+            results[2] = stats[2];
+            results[3] = stats[3];
+
+            results[4] = centeronXYPlane[0];
+            results[5] = centeronXYPlane[1];
+            results[6] = centeronXYPlane[2];
+
             return results;
         }
         /// <summary>
@@ -363,23 +458,50 @@ namespace SixDOFSensorCal
             }
             return _angles;
         }
-
-        public static double[] GetAnglesFromQuat(double[] _Qw, double[] _Qx, double[] _Qy, double[] _Qz)
+        
+        /// <summary>
+        /// GetAnglesFromQuat
+        /// Returns [n,3]array of Rx,Ry,Rz angles
+        /// </summary>
+        /// <param name="_Qw"></param>
+        /// <param name="_Qx"></param>
+        /// <param name="_Qy"></param>
+        /// <param name="_Qz"></param>
+        /// <returns></returns>
+        public static List<double[]> GetAnglesFromQuat(double[] _Qw, double[] _Qx, double[] _Qy, double[] _Qz)
         {
             int length = _Qw.Length;
-            double[] _angles = new double[length];
-
-            for (int i = 0; i < length; i++)
+            List<double[]> _angles = new List<double[]>();
+            for(int i = 0; i < length; i++)
             {
-                //double yterm = _Qw[i]*_Qw[i] + _Qx[i]*_Qx[i] - _Qy[i]*_Qy[i] - _Qz[i]*_Qz[i];
-                //double xterm = 2*(_Qw[i]*_Qz[i] + _Qx[i]*_Qy[i]);
-                //_angles[i] = Math.Atan2(yterm, xterm) * 180 / Math.PI;
-                _angles[i] = GetAngleFromQuat(_Qw[i], _Qx[i], _Qy[i], _Qz[i]);
+                _angles.Add(GetEulerFromQuat(_Qw[i], _Qx[i], _Qy[i], _Qz[i]));
             }
+
             return _angles;
         }
 
-        public static double GetAngleFromQuat(double _Qw, double _Qx, double _Qy, double _Qz)
+        public static double[] GetEulerFromQuat(double _Qw, double _Qx, double _Qy, double _Qz)
+        {
+            double[] angles = new double[3];
+            // Rx
+            double sinr_cosp = 2 * (_Qw * _Qx + _Qy * _Qz);
+            double cosr_cosp = 1 - 2 * (_Qx * _Qx + _Qy * _Qy);
+            angles[0]= Math.Atan2(sinr_cosp, cosr_cosp);
+
+            // Ry
+            double sinp = 2 * (_Qw * _Qy - _Qz * _Qx);
+            if (Math.Abs(sinp) >= 1)
+                angles[1] = Math.PI * sinp / Math.Abs(sinp); // use 90 degrees if out of range
+            else
+                angles[1]= Math.Asin(sinp);
+
+            // Rz
+            double siny_cosp = 2 * (_Qw * _Qz + _Qx * _Qy);
+            double cosy_cosp = 1 - 2 * (_Qy * _Qy + _Qz * _Qz);
+            angles[2] = Math.Atan2(siny_cosp, cosy_cosp);
+            return angles;
+        }
+        public static double GetRzFromQuat(double _Qw, double _Qx, double _Qy, double _Qz)
         {
             double _angle = -9999;
 
@@ -387,6 +509,18 @@ namespace SixDOFSensorCal
             double yterm = 2 * (_Qw * _Qz + _Qx * _Qy);
             _angle = Math.Atan2(yterm, xterm) * 180 / Math.PI;
             return _angle;
+        }
+        public static double[] GetRzFromQuatArray(double[] _Qw, double[] _Qx, double[] _Qy, double[] _Qz)
+        {
+            int length = _Qw.Length;
+            double[] angles = new double[length];
+            for (int i = 0; i < length; i++)
+            {
+                double xterm = _Qw[i] * _Qw[i] + _Qx[i] * _Qx[i] - _Qy[i] * _Qy[i] - _Qz[i] * _Qz[i];
+                double yterm = 2 * (_Qw[i] * _Qz[i] + _Qx[i] * _Qy[i]);
+                angles[i] = Math.Atan2(yterm, xterm) * 180 / Math.PI;
+            }
+            return angles;
         }
 
         public static double[] GetMatrixFromQuat(double _Qw, double _Qx, double _Qy, double _Qz)
@@ -466,6 +600,46 @@ namespace SixDOFSensorCal
             return _stats;
         }
 
+        public static double[] Stats(double[] normalAngles, double[] sensorRollAngles)
+        {
+            double[] results = new double[4];
+            double[] _stats = new double[6]; //mean, std, min, max, reg, b;
+            int counts = normalAngles.Length;
+            if (normalAngles.Length != sensorRollAngles.Length)
+                return null;
+
+            double[] _difference = new double[counts];
+            for (int i = 0; i < counts; i++)
+            {
+                _difference[i] = normalAngles[i] - sensorRollAngles[i];
+
+                if (_difference[i] < 0)
+                    _difference[i] += 360;
+            }
+
+            _stats[0] = GetMean(_difference);
+            _stats[1] = StandardDeviation(_difference);
+            _stats[2] = Min(_difference);
+            _stats[3] = Max(_difference);
+            _stats[4] = 0;
+            _stats[5] = 0;
+
+            if ((_stats[3] - _stats[2]) > 180)
+            {
+                double midpoint = (_stats[3] + _stats[2]) / 2;
+                for (int i = 0; i < counts; i++)
+                {
+                    if (_difference[i] > midpoint)
+                        _difference[i] -= 360;
+                }
+                _stats[0] = GetMean(_difference);
+                _stats[1] = StandardDeviation(_difference);
+                _stats[2] = Min(_difference);
+                _stats[3] = Max(_difference);
+            }
+
+            return _stats;
+        }
         public static double Variance(double[] x)
         {
             double mean = GetMean(x), sumSq = 0;
@@ -512,7 +686,7 @@ namespace SixDOFSensorCal
 
     public class VectorOps
     {
-               /// <summary>
+        /// <summary>
         /// 
         /// </summary>
         /// <param name="_pointsX"></param>
@@ -520,7 +694,7 @@ namespace SixDOFSensorCal
         /// <param name="_pointZ"></param>
         /// <param name="_planeEQ"></param>
         /// <returns></returns> 
-        public static List<double[]> RotatePointsOnXYPlane(List<double> _pointX, List<double> _pointY, List<double> _pointZ, double[] _planeEQ)
+        public static List<double[]> RotatePointsOntoXYPlane(List<double> _pointX, List<double> _pointY, List<double> _pointZ, double[] _planeEQ, double[] xyPlaneNormal)
         {
             //Get XYZ of points, rotate them by plane eq
             //return XY of points
@@ -534,7 +708,7 @@ namespace SixDOFSensorCal
             if (_planeEQ.Length != 3)
                 return XYCoords;
 
-            double[] xyPlaneNormal = new double[3]{ 0, 0, -1 };
+            //double[] xyPlaneNormal = new double[3]{ 0, 0, -1 };
             double[] k = CrossProduct(_planeEQ, xyPlaneNormal);
             double cosTheta = DotProduct(_planeEQ, xyPlaneNormal);
             double theta = Math.Acos(cosTheta); //since dot product is of unit vectors
@@ -554,7 +728,59 @@ namespace SixDOFSensorCal
 
             return XYCoords;
         }
+        public static List<double[]> RotatePointsOntoXYPlane(double[] _pointX, double[] _pointY, double[] _pointZ, double[] _planeEQ, double[] xyPlaneNormal)
+        {
+            //Get XYZ of points, rotate them by plane eq
+            //return XY of points
+            //using Rodrigues Rotation
+            List<double[]> XYCoords = new List<double[]>();
 
+            if (_pointX.Length != _pointY.Length)
+                return XYCoords;
+            if (_pointX.Length != _pointZ.Length)
+                return XYCoords;
+            if (_planeEQ.Length != 3)
+                return XYCoords;
+
+            //double[] xyPlaneNormal = new double[3] { 0, 0, -1 };
+            double[] k = CrossProduct(_planeEQ, xyPlaneNormal);
+            double cosTheta = DotProduct(_planeEQ, xyPlaneNormal);
+            double theta = Math.Acos(cosTheta); //since dot product is of unit vectors
+            double sinTheta = Math.Sin(theta);
+
+            for (int i = 0; i < _pointX.Length; i++)
+            {
+                double[] pt = new double[3] { _pointX[i], _pointY[i], _pointZ[i] }; //Input Point
+                double[] rotatedPoint = new double[3];
+                double[] crossProd = CrossProduct(k, pt);
+                double dotProd = DotProduct(k, pt);
+                for (int j = 0; j < 3; j++)
+                    rotatedPoint[j] = pt[j] * cosTheta + crossProd[j] * sinTheta + k[j] * dotProd * (1 - cosTheta);
+
+                XYCoords.Add(rotatedPoint);
+            }
+
+            return XYCoords;
+        }
+
+        public static double[] RotatePointOntoXYPlane(double _pointX, double _pointY, double _pointZ, double[] _planeNoraml, double[] xyPlaneNormal)
+        {
+            double[] results = new double[3];
+
+            //double[] xyPlaneNormal = new double[3] { 0, 0, -1 };
+            double[] k = CrossProduct(_planeNoraml, xyPlaneNormal);
+            double cosTheta = DotProduct(_planeNoraml, xyPlaneNormal);
+            double theta = Math.Acos(cosTheta); //since dot product is of unit vectors
+            double sinTheta = Math.Sin(theta);
+
+            double[] pt = new double[3] { _pointX, _pointY, _pointZ }; //Input Point
+            double[] crossProd = CrossProduct(k, pt);
+            double dotProd = DotProduct(k, pt);
+            for (int j = 0; j < 3; j++)
+                results[j] = pt[j] * cosTheta + crossProd[j] * sinTheta + k[j] * dotProd * (1 - cosTheta);
+
+            return results;
+        }
         /// <summary>
         /// Gets two unit vectors [x,y,z] format and returns rotation matrix between the two
         /// R = [R11, R12, R13, R21, R22, R23, R31, R32, R33];

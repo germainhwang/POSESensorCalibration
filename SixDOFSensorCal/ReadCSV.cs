@@ -35,9 +35,12 @@ namespace SixDOFSensorCal
                 int endIndexAngle = 0;
                 int startIndexPosition = 0;
                 int arrayLength = 0;
+                int dataStateIndex = 0;
                 //determine valid data from header
                 for (int i=0; i < header.Count; i++)
                 {
+                    if (header[i] == "State")
+                        dataStateIndex = i;
                     if (header[i] == "Q0")
                     {
                         // If csv contains quarternion angles, make end index larger than start index
@@ -61,147 +64,85 @@ namespace SixDOFSensorCal
                     }
                 }
 
-                double[] parsedLine = new double[arrayLength];
-
-                //List<double> _sensorRollAngle = new List<double>(); //What NDI reads
-                //List<double> _normalAngle = new List<double>(); //What I get from positions
-                //List<double> _positionX = new List<double>();
-                //List<double> _positionY = new List<double>();
-                //List<double> _positionZ = new List<double>();
-                //List<double[]> _rotationMatrice = new List<double[]>();
-
                 
-
+                
                 foreach (var line in lines)
                 {
+                    double[] parsedLine = new double[arrayLength];
                     //double _angle = 0;
                     double _posX = 0;
                     double _posY = 0;
                     double _posZ = 0;
                     //double[] _rotMat = new double[9];
-                    if (startIndexAngle < endIndexAngle) //if quaternion
+                    if (line[dataStateIndex] == "OK")
                     {
-                        double _w = 0, _x = 0, _y = 0, _z = 0;
-                        try
+                        if (startIndexAngle < endIndexAngle) //if quaternion
                         {
-                            _w = Convert.ToDouble(line[startIndexAngle]);
-                            _x = Convert.ToDouble(line[startIndexAngle+1]);
-                            _y = Convert.ToDouble(line[startIndexAngle+2]);
-                            _z = Convert.ToDouble(line[startIndexAngle+3]);
-                        }
-                        catch
-                        {
-                            _w = 999999.0;
-                        }
-                        finally
-                        {
-                            //I could check if sqaure sum of quaternion angles is 1
-                            double _angleSum = Math.Abs(_w + _x + _y + _z);
-                            if (_w < 999999.0)
+                            double _w = 0, _x = 0, _y = 0, _z = 0;
+                            try
                             {
-                                parsedLine[3] = _w;
-                                parsedLine[4] = _x;
-                                parsedLine[5] = _y;
-                                parsedLine[6] = _z;
-                                //_angle = Calc.GetAngleFromQuat(_w, _x, _y, _z);
-                                //_rotMat = Calc.GetMatrixFromQuat(_w, _x, _y, _z);
+                                _w = Convert.ToDouble(line[startIndexAngle]);
+                                _x = Convert.ToDouble(line[startIndexAngle + 1]);
+                                _y = Convert.ToDouble(line[startIndexAngle + 2]);
+                                _z = Convert.ToDouble(line[startIndexAngle + 3]);
+                            }
+                            catch
+                            {
+                                _w = 999999.0;
+                            }
+                            finally
+                            {
+                                //I could check if sqaure sum of quaternion angles is 1
+                                double _angleSum = Math.Abs(_w + _x + _y + _z);
+                                if (_w < 999999.0)
+                                {
+                                    parsedLine[3] = _w;
+                                    parsedLine[4] = _x;
+                                    parsedLine[5] = _y;
+                                    parsedLine[6] = _z;
+                                }
                             }
                         }
-                    }
-                    else
-                    {
-                        double _rx = 0, _ry = 0, _rz = 0;
+                        else
+                        {
+                            double _rx = 0, _ry = 0, _rz = 0;
+                            try
+                            {
+                                _rz = Convert.ToDouble(line[startIndexAngle]);
+                                _ry = Convert.ToDouble(line[startIndexAngle + 1]);
+                                _rx = Convert.ToDouble(line[startIndexAngle + 2]);
+                            }
+                            catch
+                            {
+                                _rz = 999999.0;
+                            }
+                            finally
+                            {
+                                parsedLine[3] = _rx;
+                                parsedLine[4] = _ry;
+                                parsedLine[5] = _rz;
+                            }
+                        }
                         try
                         {
-                            _rz = Convert.ToDouble(line[startIndexAngle]);
-                            _ry = Convert.ToDouble(line[startIndexAngle+1]);
-                            _rx = Convert.ToDouble(line[startIndexAngle+2]);
+                            _posX = Convert.ToDouble(line[startIndexPosition]);
+                            _posY = Convert.ToDouble(line[startIndexPosition + 1]);
+                            _posZ = Convert.ToDouble(line[startIndexPosition + 2]);
                         }
                         catch
                         {
-                            _rz = 999999.0;
+                            _posX = 999999.0;
                         }
-                        finally
-                        {
-                            parsedLine[3] = _rx;
-                            parsedLine[4] = _ry;
-                            parsedLine[5] = _rz;
-                        }
-                    }
-                    try
-                    {
-                        _posX = Convert.ToDouble(line[startIndexPosition]);
-                        _posY = Convert.ToDouble(line[startIndexPosition + 1]);
-                        _posZ = Convert.ToDouble(line[startIndexPosition + 2]);
-                    }
-                    catch
-                    {
-                        _posX = 999999.0;
-                    }
 
-                    if (_posX < 999999.0) //check for any invalid value - NDI returns non numeric value                    {
-                    {
-                        //_sensorRollAngle.Add(_angle);
-                        //_positionX.Add(_posX);
-                        //_positionY.Add(_posY);
-                        //_positionZ.Add(_posZ);
-                        //_rotationMatrice.Add(_rotMat);
-                        parsedLine[0] = _posX;
-                        parsedLine[1] = _posY;
-                        parsedLine[2] = _posZ;
-                        parsedData.Add(parsedLine);
+                        if (_posX < 999999.0) //check for any invalid value - NDI returns non numeric value                    {
+                        {
+                            parsedLine[0] = _posX;
+                            parsedLine[1] = _posY;
+                            parsedLine[2] = _posZ;
+                            parsedData.Add(parsedLine);
+                        }
                     }
                 }
-
-                //double[] plane = Calc.GetPlaneFromPoints(_positionX, _positionY, _positionZ);
-                //double[] xyPlane = new double[3] { 0, 0, -1 };
-                //List<double[]> rotatedPoints = VectorOps.RotatePointsOnXYPlane(_positionX, _positionY, _positionZ, plane);
-                //double[] rotMatrix = VectorOps.FindRotMatrixFromTwoVectors(plane, xyPlane);
-                
-
-
-                //double[] xPos = new double[rotatedPoints.Count];
-                //double[] yPos = new double[rotatedPoints.Count];
-                //double[] sensorAngles = new double[rotatedPoints.Count];
-                //double cosTheta = VectorOps.DotProduct(plane, xyPlane);
-                //double theta = Math.Acos(cosTheta)*180/3.141592;
-                //for (int i = 0; i< rotatedPoints.Count; i++)
-                //{
-                //    xPos[i] = rotatedPoints[i][0];
-                //    yPos[i] = rotatedPoints[i][1];
-                //}
-
-                //double[] CenteronXY = Calc.FindCenter(xPos, yPos);
-
-                ////Calculation
-                //Center = Calc.FindCenter(_positionX.ToArray(), _positionY.ToArray());
-                 
-                //double[] _angles = Calc.GetNormalAnglesAtPositions(_positionX, _positionY);
-                //double[] _anglesOnXY = Calc.GetNormalAnglesAtPositions(xPos, yPos);
-                //for (int i = 0; i < rotatedPoints.Count; i++)
-                //{
-                //    _anglesOnXY[i] -= theta;
-                //}
-
-                //    _normalAngle = _angles.ToList();
-
-                //using (FileStream fs = new FileStream("d:\\test.csv", FileMode.Create))
-                //{
-                //    using (StreamWriter sw = new StreamWriter(fs))
-                //    {
-                //        sw.WriteLine("{0},{1},{2}", "Normal Angle", "Sensor Roll Angle", "Difference Measured-Normal angle, Rotated on XY plane");
-                //        for (int i = 0; i < _normalAngle.Count(); ++i)
-                //        {
-                //            sw.WriteLine("{0},{1},{2},{3}", _normalAngle[i], _sensorRollAngle[i], _normalAngle[i] - _sensorRollAngle[i], _anglesOnXY[i]);
-                //        }
-                //    }
-                //}
-
-                //double[] stats = Calc.Stats(_normalAngle, _sensorRollAngle);
-                //AngleCorrection = stats[0];
-                //AngleDeviation = stats[1];
-                //AngleMin = stats[2];
-                //AngleMax = stats[3];
             }
             return parsedData;
         }

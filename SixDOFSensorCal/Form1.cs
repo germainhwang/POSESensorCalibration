@@ -28,18 +28,20 @@ namespace SixDOFSensorCal
                 List<double[]> poseData = new List<double[]>();
                 poseData.AddRange(ReadCSV.ParseNDIFile(openFileDialog1.FileName));
 
-                //Calculate 
-                Calc.Process()
+                //Perform circle fitting on the points and calculate roll angle offset
+                //return doulbe array in the format
+                //{offset angle, stdev, min, max, x center, y center, radius}
+                double[] results = Calc.Process(poseData);
 
 
-                this.textBox1.Text = ReadCSV.AngleCorrection.ToString("F5");
-                this.textBox2.Text = ReadCSV.AngleDeviation.ToString("F5");
-                this.textBox3.Text = ReadCSV.AngleMin.ToString("F5");
-                this.textBox4.Text = ReadCSV.AngleMax.ToString("F5");
+                this.textBox1.Text = results[0].ToString("F5");
+                this.textBox2.Text = results[1].ToString("F5");
+                this.textBox3.Text = results[2].ToString("F5");
+                this.textBox4.Text = results[3].ToString("F5");
                 StringBuilder sb = new StringBuilder();
-                sb.AppendLine(ReadCSV.Center[0].ToString("F5"));
-                sb.AppendLine(ReadCSV.Center[1].ToString("F5"));
-                sb.AppendLine(ReadCSV.Center[2].ToString("F5"));
+                sb.AppendLine(results[4].ToString("F5"));
+                sb.AppendLine(results[5].ToString("F5"));
+                sb.AppendLine(results[6].ToString("F5"));
                 richTextBox1.Text = sb.ToString();
             }
         }
